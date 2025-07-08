@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux 文件浏览器</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .toolbar {
+            padding: 15px;
+            background: #4285f4;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        .path-display {
+            flex-grow: 1;
+            font-family: monospace;
+            padding: 5px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            margin: 0 15px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #refresh-btn {
+            background: #34a853;
+            color: white;
+            margin-left: 10px;
+        }
+        #download-btn, #download-btn1{
+            background: #ea4335;
+            color: white;
+            margin-left: 10px;
+        }
+        #download-btn:disabled, #download-btn1:disabled {
+            background: #cccccc;
+        }
+        .selection-info {
+            margin-left: 15px;
+            font-size: 0.9em;
+        }
+        .file-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .file-item:hover {
+            background-color: #f9f9f9;
+        }
+        .file-checkbox {
+            margin-right: 10px;
+        }
+        .file-icon {
+            margin-right: 10px;
+            width: 24px;
+            text-align: center;
+        }
+        .dir-icon {
+            color: #4285f4;
+        }
+        .file-name {
+            flex-grow: 1;
+        }
+        .file-size {
+            color: #666;
+            font-size: 0.9em;
+            min-width: 80px;
+            text-align: right;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 600px;
+            max-width: 90%;
+        }
+        .progress-container {
+            margin: 20px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #4285f4;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .loading {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+        }
+        .hostname{
+            margin-right: 5px;
+            margin-left: 5px;
+        }
+        .list-header {
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            margin-left: 300px;
+            margin-right: 100px;
+      }
+
+      .file-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .file-item {
+        padding: 8px 16px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .file-item:hover {
+        background: #f9f9f9;
+      }
+
+      .sort-icon {
+        margin-left: 8px;
+      }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="toolbar">
+            <button type="button" class="btn btn-secondary" style=" background: #34a853; color: white;"
+                    onclick="window.location.href='/manage-ssh'">
+              返回配置管理
+            </button>
+            <button id="refresh-btn">刷新</button>
+            <button id="download-btn" disabled>下载选中文件-zip下载</button>
+            <span class="selection-info" id="selection-info">未选择文件</span>
+            <div class="path-display" id="current-path">/</div>
+            <div class="hostname" id="hostname">{{config.hostname}}</div>
+            <span>连接用户: {{ config.username }}</span>
+        </div>
+        <div class="file-list-container">
+            <div class="list-header" id="sort-header">文件名 <span class="sort-icon">↕</span></div>
+            <ul class="file-list" id="file-list">
+                <li class="loading">加载中...</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="modal" id="progress-modal">
+        <div class="modal-content">
+            <h3>文件下载中...</h3>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-text" id="progress-text">准备下载...</div>
+            </div>
+            <div id="download-details"></div>
+        </div>
+    </div>
+    <div  class="modal"  id="progress-modal1">
+        <div class="modal-content">
+            <h3>文件总体进度下载进度</h3>
+
+            <!-- 总体进度 -->
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="overall-progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text" id="overall-progress-text"></div>
+            </div>
+
+            <!-- 单个文件进度容器 -->
+            <div id="progress-container"></div>
+
+            <button onclick="$('#progress-modal1').hide()">取消</button>
+        </div>
+    </div>
+
+    <script>
+        let currentPath = '/';
+        let selectedFiles = [];
+
+
+        document.getElementById('sort-header').addEventListener('click', function() {
+            const fileList = document.getElementById('file-list');
+            const items = Array.from(fileList.getElementsByClassName('file-item'));
+            const sortIcon = this.querySelector('.sort-icon');
+
+            // Determine current sort direction
+            const ascending = this.getAttribute('data-sort') !== 'asc';
+
+            // Sort items by file name
+            items.sort((a, b) => {
+              const nameA = a.textContent.toLowerCase();
+              const nameB = b.textContent.toLowerCase();
+              return ascending
+                ? nameA.localeCompare(nameB)
+                : nameB.localeCompare(nameA);
+            });
+
+            // Reorder items in DOM
+            items.forEach(item => fileList.appendChild(item));
+
+            // Update sort state and icon
+            this.setAttribute('data-sort', ascending ? 'asc' : 'desc');
+            sortIcon.textContent = ascending ? '↑' : '↓';
+        });
+
+        function selectConfig(name) {
+            window.location.href = '/select-config/' + encodeURIComponent(name);
+        }
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
+        }
+
+        // 加载目录内容
+        function loadDirectory(path) {
+            currentPath = path;
+            $('#file-list').html('<li class="loading">加载中...</li>');
+            $('#current-path').text(path);
+
+            $.ajax({
+                url: '/list',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ path: path }),
+                success: function(response) {
+                    if (response.success) {
+                        renderFiles(response.files);
+                    } else {
+                        showError(response.error);
+                    }
+                },
+                error: function(xhr) {
+                    showError(xhr.statusText);
+                }
+            });
+        }
+
+        // 渲染文件列表
+        function renderFiles(files) {
+            $('#file-list').empty();
+
+            // 添加返回上级目录项
+            if (currentPath !== '/') {
+                const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+                $('#file-list').append(`
+                    <li class="file-item" data-path="${parentPath}" data-is-dir="true">
+                        <div class="file-icon dir-icon">📁</div>
+                        <div class="file-name">..</div>
+                        <div class="file-size"></div>
+                    </li>
+                `);
+            }
+
+            // 添加文件和目录项
+            files.forEach(file => {
+                const icon = file.is_dir ? '📁' : '📄';
+                const size = file.is_dir ? '' : formatFileSize(file.size);
+
+                $('#file-list').append(`
+                    <li class="file-item" data-path="${file.path}" data-is-dir="${file.is_dir}" data-size="${file.size}">
+                        <input type="checkbox" class="file-checkbox" ${file.is_dir ? 'disabled' : ''}>
+                        <div class="file-icon ${file.is_dir ? 'dir-icon' : ''}">${icon}</div>
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${size}</div>
+                    </li>
+                `);
+            });
+
+            // 绑定事件
+            $('.file-checkbox').change(updateSelection);
+            $('.file-item').dblclick(function() {
+                if ($(this).data('is-dir')) {
+                    loadDirectory($(this).data('path'));
+                }
+            });
+
+            updateSelection();
+        }
+
+        // 更新选中状态
+        function updateSelection() {
+            selectedFiles = [];
+            let totalSize = 0;
+
+            $('.file-checkbox:checked').each(function() {
+                const item = $(this).closest('.file-item');
+                selectedFiles.push({
+                    path: item.data('path'),
+                    name: item.find('.file-name').text(),
+                    size: item.data('size')
+                });
+                totalSize += item.data('size') || 0;
+            });
+
+            // 更新UI
+            const count = selectedFiles.length;
+            $('#download-btn').prop('disabled', count === 0);
+            $('#download-btn1').prop('disabled', count === 0);
+            $('#selection-info').text(
+                count ? `已选择 ${count} 个文件 (${formatFileSize(totalSize)})` : '未选择文件'
+            );
+        }
+
+        // 显示错误
+        function showError(message) {
+            $('#file-list').html(`
+                <li class="loading" style="color: red">
+                    错误: ${message}<br>
+                    <button onclick="loadDirectory('/')">返回根目录</button>
+                </li>
+            `);
+        }
+
+        // 下载文件
+        function downloadFiles() {
+            if (selectedFiles.length === 0) return;
+
+            // 显示进度模态框
+            $('#progress-modal').show();
+            $('#progress-fill').css('width', '0%');
+            $('#progress-text').text('准备下载...');
+
+            // 使用XMLHttpRequest替代fetch以获得更好的进度支持
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/download', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.responseType = 'blob';
+
+            // 进度更新
+            xhr.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    $('#progress-fill').css('width', percent + '%');
+                    $('#progress-text').text(`下载中 ${percent}%`);
+                }
+            };
+
+            xhr.onload = function() {
+                if (this.status === 200) {
+                    // 创建下载链接
+                    const blob = this.response;
+                    const url = window.URL.createObjectURL(blob);
+
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'downloaded_files.zip';
+                    document.body.appendChild(a);
+                    a.click();
+
+                    // 清理
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    // 更新UI
+                    $('#progress-fill').css('width', '100%');
+                    $('#progress-text').text('下载完成！');
+
+                    setTimeout(() => {
+                        $('#progress-modal').hide();
+                    }, 2000);
+                } else {
+                    $('#progress-text').text('下载失败: ' + this.statusText);
+                }
+            };
+
+            xhr.onerror = function() {
+                $('#progress-text').text('网络错误');
+            };
+
+            // 发送请求
+            xhr.send(JSON.stringify({
+                files: selectedFiles.map(f => f.path)
+            }));
+        }
+
+        function downloadEachFiles() {
+            if (selectedFiles.length === 0) return;
+
+            // 显示进度模态框
+            $('#progress-modal1').show();
+            $('#progress-container').empty(); // 清空之前的进度条
+            $('#overall-progress-fill').css('width', '0%');
+            $('#overall-progress-text').text('准备下载...');
+
+            // 为每个文件创建进度条
+            selectedFiles.forEach((file, index) => {
+                $('#progress-container').append(`
+                    <div class="file-download-item">
+                        <div class="filename">${file.name}</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="file-${index}-progress" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text" id="file-${index}-text">等待下载</div>
+                        <div class="file-size" id="file-${index}-size">-</div>
+                    </div>
+                `);
+            });
+
+
+            // 使用fetch API获取文件列表
+            fetch('/download_items', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    files: selectedFiles.map(f => f.path)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.error || '下载失败');
+                }
+
+                let completedCount = 0;
+                const totalFiles = data.files.length;
+
+                // 更新总进度
+                function updateOverallProgress() {
+                    const percent = Math.round((completedCount / totalFiles) * 100);
+                    $('#overall-progress-fill').css('width', percent + '%');
+                    $('#overall-progress-text').text(`已完成 ${completedCount}/${totalFiles} 个文件`);
+
+                    if (completedCount === totalFiles) {
+                        $('#overall-progress-text').text('所有文件下载完成！');
+                        setTimeout(() => $('#progress-modal1').hide(), 3000);
+                    }
+                }
+
+                // 逐个下载文件
+                data.files.forEach((file, index) => {
+                    $(`#file-${index}-size`).text(formatFileSize(file.size));
+                    $(`#file-${index}-text`).text('准备下载...');
+
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', file.download_url, true);
+                    xhr.responseType = 'blob';
+
+                    xhr.onprogress = function(e) {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            $(`#file-${index}-progress`).css('width', percent + '%');
+                            $(`#file-${index}-text`).text(`下载中 ${percent}%`);
+                        }
+                    };
+
+                    xhr.onload = function() {
+                        if (this.status === 200) {
+                            // 创建下载链接
+                            const blob = this.response;
+                            const url = window.URL.createObjectURL(blob);
+
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = url;
+                            a.download = file.filename;
+                            document.body.appendChild(a);
+                            a.click();
+
+                            // 清理
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+
+                            // 更新UI
+                            $(`#file-${index}-progress`).css('width', '100%');
+                            $(`#file-${index}-text`).text('下载完成');
+
+                            completedCount++;
+                            updateOverallProgress();
+                        } else {
+                            $(`#file-${index}-text`).text('下载失败');
+                            completedCount++;
+                            updateOverallProgress();
+                        }
+                    };
+
+                    xhr.onerror = function() {
+                        $(`#file-${index}-text`).text('网络错误');
+                        completedCount++;
+                        updateOverallProgress();
+                    };
+
+                    xhr.send();
+                });
+            })
+            .catch(error => {
+                $('#overall-progress-text').text('错误: ' + error.message);
+            });
+        }
+
+        // 辅助函数：格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 绑定按钮事件
+        $(document).ready(function() {
+            $('#refresh-btn').click(() => loadDirectory(currentPath));
+            $('#download-btn').click(downloadFiles);
+            $('#download-btn1').click(downloadEachFiles);
+
+            // 初始加载根目录
+            loadDirectory('/');
+        });
+    </script>
+</body>
+</html>

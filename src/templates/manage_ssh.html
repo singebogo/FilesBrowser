@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSH配置管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" integrity="sha512-jnSuA4Ss2PkkikSOLtYs8BlYIeeIK1h99ty4YfvRPAlzr377vr3CXDb7sb7eEEBYjDtcYj+AjBH3FLv5uSJuXg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        .config-card {
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .config-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2 class="mb-4">SSH配置管理</h2>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>添加/修改配置</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="sshConfigForm">
+                            <div class="mb-3">
+                                <label class="form-label">配置名称</label>
+                                <input type="text" class="form-control" name="config_name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">主机地址</label>
+                                <input type="text" class="form-control" name="hostname" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">端口</label>
+                                <input type="number" class="form-control" name="port" value="22" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">用户名</label>
+                                <input type="text" class="form-control" name="username" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">密码</label>
+                                <input type="password" class="form-control" name="password">
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" name="allow_agent">
+                                <label class="form-check-label">允许使用SSH代理</label>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" name="look_for_keys">
+                                <label class="form-check-label">查找密钥文件</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">保存配置</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <h5>已有配置</h5>
+                <div id="configList" class="row">
+                    {% for name, config in configs.items() %}
+                    <div class="col-md-6">
+                        <div class="card config-card" onclick="selectConfig('{{ name }}')">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ name }}</h5>
+                                <p class="card-text">
+                                    <small>主机: {{ config.hostname }}:{{ config.port }}</small><br>
+                                    <small>用户: {{ config.username }}</small>
+                                </p>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        onclick="deleteConfig(event, '{{ name }}')">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            $('#sshConfigForm').submit(function(e) {
+                e.preventDefault();
+
+                $.ajax({
+                    url: '/manage-ssh',
+                    method: 'POST',
+                    data: $(this).serialize(),
+                    success: function() {
+                        alert('配置保存成功');
+                        location.reload();
+                    },
+                    error: function() {
+                        alert('保存失败');
+                    }
+                });
+            });
+        });
+
+        function selectConfig(name) {
+            window.location.href = '/select-config/' + encodeURIComponent(name);
+        }
+
+        function deleteConfig(e, name) {
+            e.stopPropagation();
+            if (confirm('确定要删除配置 "' + name + '" 吗？')) {
+                $.ajax({
+                    url: '/delete-config',
+                    method: 'POST',
+                    data: {config_name: name},
+                    success: function() {
+                        location.reload();
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

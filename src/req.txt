@@ -1,0 +1,7 @@
+eventlet-0.40.0
+paramiko-3.5
+flask
+flask_socketio
+tqdm
+flask_cors
+flask_sqlalchemy
